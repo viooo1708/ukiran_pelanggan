@@ -100,7 +100,6 @@ class _PesananScreenState extends State<PesananScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Scaffold dihapus, langsung mereturn Container agar menyatu dengan MainScreen
     return _isLoading
         ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
         : _orders.isEmpty
@@ -143,7 +142,16 @@ class _PesananScreenState extends State<PesananScreen> {
                     final statusPesanan = order['status_pesanan'] ?? 'menunggu';
                     final estimasiBiaya = order['estimasi_biaya'] ?? 0;
                     final kodePesanan = order['kode_pesanan'] ?? '-';
-                    final tanggal = order['tanggal_pesanan'] ?? '';
+                    final rawTanggal = order['tanggal_pesanan'] ?? '';
+                    String tanggal = '-';
+                    if (rawTanggal.isNotEmpty) {
+                      try {
+                        DateTime parsedDate = DateTime.parse(rawTanggal).toLocal();
+                        tanggal = "${parsedDate.day.toString().padLeft(2, '0')}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.year} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
+                      } catch (e) {
+                        tanggal = rawTanggal;
+                      }
+                    }
 
                     return GestureDetector(
                       onTap: () => _showOrderDetailModal(context, order),
@@ -314,9 +322,22 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
     final productName = _orderData['product']?['nama_product'] ?? _orderData['nama_custom'] ?? 'Pesanan Custom';
     final statusPesanan = _orderData['status_pesanan'] ?? 'menunggu';
     final estimasiBiaya = _orderData['estimasi_biaya'] ?? 0;
+    final jumlahDp = _orderData['jumlah_dp'] ?? 0;
+    final statusPembayaran = _orderData['status_pembayaran'] ?? 'belum_bayar';
     final estimasiWaktu = _orderData['estimasi_waktu'] ?? 'Menunggu konfirmasi';
     final kodePesanan = _orderData['kode_pesanan'] ?? '-';
-    final tanggal = _orderData['tanggal_pesanan'] ?? '';
+    
+    final rawTanggal = _orderData['tanggal_pesanan'] ?? '';
+    String tanggal = '-';
+    if (rawTanggal.isNotEmpty) {
+      try {
+        DateTime parsedDate = DateTime.parse(rawTanggal).toLocal();
+        tanggal = "${parsedDate.day.toString().padLeft(2, '0')}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.year} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
+      } catch (e) {
+        tanggal = rawTanggal;
+      }
+    }
+
     final jumlah = _orderData['jumlah'] ?? 1;
     final catatan = _orderData['catatan'] ?? 'Tidak ada catatan khusus.';
     
@@ -396,7 +417,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
                             const SizedBox(height: 16),
                             _buildSpecRow('Jumlah Pesanan', '$jumlah Pcs'),
                             const Divider(height: 16, color: Color(0xFFEADFD8)),
-                            _buildSpecRow('Tanggal Pesanan', tanggal),
+                            _buildSpecRow('Tanggal & Waktu Pesanan', tanggal),
                             const Divider(height: 16, color: Color(0xFFEADFD8)),
                             _buildSpecRow('Estimasi Waktu', estimasiWaktu, valueColor: const Color(0xFFB45309)),
                             const Divider(height: 16, color: Color(0xFFEADFD8)),
@@ -410,9 +431,74 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
                                 ),
                               ],
                             ),
+                            const Divider(height: 16, color: Color(0xFFEADFD8)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Jumlah DP (Uang Muka)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
+                                Text(
+                                  'Rp ${jumlahDp.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 16, color: Color(0xFFEADFD8)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Status Pembayaran', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: statusPembayaran == 'lunas' 
+                                        ? const Color(0xFF059669).withOpacity(0.1) 
+                                        : (statusPembayaran == 'dp_dibayar' ? const Color(0xFFB45309).withOpacity(0.1) : const Color(0xFF6B7280).withOpacity(0.1)),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    statusPembayaran.replaceAll('_', ' ').toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10, 
+                                      fontWeight: FontWeight.w800, 
+                                      color: statusPembayaran == 'lunas' 
+                                          ? const Color(0xFF059669) 
+                                          : (statusPembayaran == 'dp_dibayar' ? const Color(0xFFB45309) : const Color(0xFF6B7280)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      // --- TOMBOL MENU CHAT DENGAN OWNER ---
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatScreen(
+                                  orderId: widget.orderId,
+                                  kodePesanan: kodePesanan,
+                                  baseUrl: widget.baseUrl,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18, color: Colors.white),
+                          label: const Text('Diskusi & Chat dengan Owner', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF5D4037),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                      // ------------------------------------
                       const SizedBox(height: 24),
                       const Text('Spesifikasi Produk', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
                       const SizedBox(height: 10),
@@ -553,6 +639,244 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
         Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
         Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: valueColor ?? const Color(0xFF3E2723))),
       ],
+    );
+  }
+}
+
+// ==========================================
+// LAYAR CHAT FLUTTER (CHAT SCREEN)
+// ==========================================
+class ChatScreen extends StatefulWidget {
+  final int orderId;
+  final String kodePesanan;
+  final String baseUrl;
+
+  const ChatScreen({
+    Key? key,
+    required this.orderId,
+    required this.kodePesanan,
+    required this.baseUrl,
+  }) : super(key: key);
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  List<dynamic> _messages = [];
+  bool _isLoading = true;
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  Timer? _pollingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMessages();
+
+    // Polling setiap 4 detik untuk mengambil pesan baru secara otomatis
+    _pollingTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      _fetchMessages(isBackground: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchMessages({bool isBackground = false}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final response = await http.get(
+        Uri.parse('${widget.baseUrl}/orders/${widget.orderId}/chats'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            _messages = decoded['data'] ?? [];
+            if (!isBackground) _isLoading = false;
+          });
+          if (!isBackground) _scrollToBottom();
+        }
+      } else {
+        if (!isBackground && mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (!isBackground && mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    _messageController.clear();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final response = await http.post(
+        Uri.parse('${widget.baseUrl}/orders/${widget.orderId}/chats'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'message': text}),
+      );
+
+      if (response.statusCode == 201) {
+        _fetchMessages(isBackground: true);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal mengirim pesan'), backgroundColor: Color(0xFFEF4444)),
+      );
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFDFBF7),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Color(0xFF3E2723)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Chat Diskusi Owner', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF3E2723))),
+            Text('Pesanan: ${widget.kodePesanan}', style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: const Color(0xFFEADFD8), height: 1),
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
+                : _messages.isEmpty
+                    ? const Center(child: Text('Belum ada pesan. Mulai diskusi sekarang!', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))))
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = _messages[index];
+                          // Asumsi ID user yang sedang login bisa dicek atau disesuaikan
+                          final isMe = msg['sender']?['id'] != 1; // Sesuaikan dengan logika role Anda (jika id=1 owner)
+
+                          return Align(
+                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                              decoration: BoxDecoration(
+                                color: isMe ? const Color(0xFF5D4037) : Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: isMe ? null : Border.all(color: const Color(0xFFEADFD8)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    msg['sender']?['name'] ?? 'User',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isMe ? Colors.white70 : const Color(0xFF5D4037),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    msg['message'] ?? '',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: isMe ? Colors.white : const Color(0xFF3E2723),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      hintText: 'Tulis pesan...',
+                      hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                      filled: true,
+                      fillColor: const Color(0xFFFDFBF7),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFEADFD8)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFEADFD8)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF5D4037)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _sendMessage,
+                  icon: const Icon(Icons.send_rounded, color: Color(0xFF5D4037)),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFFEADFD8).withOpacity(0.5),
+                    padding: const EdgeInsets.all(10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
