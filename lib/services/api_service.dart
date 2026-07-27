@@ -6,7 +6,8 @@ class ApiService {
   // Gunakan IP lokal komputer Anda jika testing di HP fisik, 
   // atau 10.0.2.2 jika menggunakan Emulator Android.
   // static const String baseUrl = 'http://10.0.2.2:1000/api';
-  static const String baseUrl = 'http://127.0.0.1:1000/api';
+  // static const String baseUrl = 'http://127.0.0.1:1000/api';
+  static const String baseUrl = 'http://192.168.18.65:1000/api';
 
   // Menyimpan token ke SharedPreferences
   Future<void> saveToken(String token) async {

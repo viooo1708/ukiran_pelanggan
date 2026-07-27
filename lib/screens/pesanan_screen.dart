@@ -18,7 +18,7 @@ class _PesananScreenState extends State<PesananScreen> {
 
   final String baseUrl = kIsWeb 
       ? 'http://127.0.0.1:1000/api' 
-      : 'http://10.0.2.2:1000/api';
+      : 'http://192.168.18.65:1000/api';
 
   @override
   void initState() {

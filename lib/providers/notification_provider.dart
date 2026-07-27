@@ -16,7 +16,8 @@ class NotificationProvider with ChangeNotifier {
   // Sesuaikan URL base ini dengan port Laravel Anda (misal: 1000, 8000, dll)
   final String baseUrl = kIsWeb 
       ? 'http://127.0.0.1:1000/api' 
-      : 'http://10.0.2.2:1000/api';
+      : 'http://192.168.18.65:1000/api';
+      
 
   Future<void> fetchNotifications() async {
     _isLoading = true;
