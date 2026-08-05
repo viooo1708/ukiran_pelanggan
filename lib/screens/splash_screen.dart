@@ -76,16 +76,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Kotak Ikon Mewah dengan Gradien & Bayangan Lembut
+                  // Kotak Logo Kustom dengan Bayangan Lembut
                   Container(
                     width: 85,
                     height: 85,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFF5D4037), Color(0xFF3E2723)],
-                      ),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
@@ -99,13 +95,22 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         width: 1,
                       ),
                     ),
-                    child: const Icon(Icons.chair_rounded, size: 42, color: Colors.white),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(23),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Image.asset(
+                          'assets/logo-ukir.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 28),
                   
                   // Nama Aplikasi
                   const Text(
-                    'KRIYA UKIR', 
+                    'ADI UKIRAN', 
                     style: TextStyle(
                       color: Color(0xFF3E2723), 
                       fontSize: 26, 

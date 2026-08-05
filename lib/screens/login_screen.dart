@@ -126,27 +126,36 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Ikon Header (Mengikuti gaya SplashScreen)
+                    // Logo Header Kustom (Mengikuti gaya SplashScreen)
                     Center(
                       child: Container(
                         width: 72,
                         height: 72,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF5D4037), Color(0xFF3E2723)],
-                          ),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF5D4037).withOpacity(0.3),
+                              color: const Color(0xFF5D4037).withOpacity(0.2),
                               blurRadius: 16,
                               offset: const Offset(0, 8),
                             ),
                           ],
+                          border: Border.all(
+                            color: const Color(0xFF3E2723).withOpacity(0.3),
+                            width: 1,
+                          ),
                         ),
-                        child: const Icon(Icons.chair_rounded, size: 36, color: Colors.white),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(19),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Image.asset(
+                              'assets/logo-ukir.png',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -164,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Masuk ke portal pelanggan Kriya Ukir',
+                      'Masuk ke portal pelanggan Adi Ukiran',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -188,10 +197,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      // Dekorasi (border, fill color) sudah di-handle oleh main.dart
-                      // Kita hanya perlu menambahkan hint dan icon spesifik
                       decoration: const InputDecoration(
-                        hintText: 'pelanggan@kriyaukir.com',
+                        hintText: 'pelanggan@adiukiran.com',
                         prefixIcon: Icon(Icons.email_outlined, size: 20, color: Color(0xFF9CA3AF)),
                       ),
                       validator: (val) {
@@ -240,11 +247,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     
                     // TOMBOL LOGIN
                     SizedBox(
-                      height: 52, // Sedikit lebih tinggi agar nyaman ditekan
+                      height: 52,
                       child: ElevatedButton(
                         onPressed: (isLoading || _isLocked) ? null : _submit,
-                        // style ElevatedButton sudah di-handle di main.dart
-                        // Kecuali jika ada state spesifik (seperti disabled)
                         style: ElevatedButton.styleFrom(
                           disabledBackgroundColor: const Color(0xFFE5E7EB),
                           disabledForegroundColor: const Color(0xFF9CA3AF),

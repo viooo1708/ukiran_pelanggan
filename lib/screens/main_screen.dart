@@ -200,11 +200,7 @@ class _MainScreenState extends State<MainScreen> {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF5d4037), Color(0xFF3e2723)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
@@ -213,8 +209,21 @@ class _MainScreenState extends State<MainScreen> {
                         offset: const Offset(0, 2),
                       ),
                     ],
+                    border: Border.all(
+                      color: const Color(0xFF3e2723).withOpacity(0.2),
+                      width: 1,
+                    ),
                   ),
-                  child: const Icon(Icons.chair, color: Colors.white, size: 20),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6.0),
+                      child: Image.asset(
+                        'assets/logo-ukir.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Column(
