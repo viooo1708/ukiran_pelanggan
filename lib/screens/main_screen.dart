@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/notification_provider.dart';
+import '../providers/cart_provider.dart';
 import 'katalog_screen.dart';
 import 'custom_screen.dart';
 import 'pesanan_screen.dart';
 import 'profil_screen.dart';
+import 'cart_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -22,7 +24,6 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    // Ambil data notifikasi secara otomatis saat masuk MainScreen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<NotificationProvider>(context, listen: false).fetchNotifications();
     });
@@ -35,7 +36,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _openNotificationsModal(BuildContext context) {
-    // Panggil fetchNotifications secara langsung menggunakan Provider saat modal dibuka
     final notifProvider = Provider.of<NotificationProvider>(context, listen: false);
     notifProvider.fetchNotifications(); 
 
@@ -85,7 +85,6 @@ class _MainScreenState extends State<MainScreen> {
               ),
               const Divider(height: 20),
               Expanded(
-                // Menggunakan Consumer agar UI otomatis rebuild saat data selesai diambil dari API
                 child: Consumer<NotificationProvider>(
                   builder: (context, provider, child) {
                     if (provider.isLoading) {
@@ -243,8 +242,9 @@ class _MainScreenState extends State<MainScreen> {
               ],
             ),
             actions: [
+              // Tombol Notifikasi
               Padding(
-                padding: const EdgeInsets.only(right: 12.0),
+                padding: const EdgeInsets.only(right: 4.0),
                 child: Consumer<NotificationProvider>(
                   builder: (context, notifProvider, child) {
                     return Stack(
@@ -271,6 +271,27 @@ class _MainScreenState extends State<MainScreen> {
                       ],
                     );
                   },
+                ),
+              ),
+              
+              // Tombol Keranjang Belanja (Tepat di sebelah kanan notifikasi)
+              Padding(
+                padding: const EdgeInsets.only(right: 12.0),
+                child: IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const CartScreen()),
+                    );
+                  },
+                  icon: Consumer<CartProvider>(
+                    builder: (context, cart, child) => Badge(
+                      isLabelVisible: cart.itemCount > 0,
+                      label: Text('${cart.itemCount}'),
+                      child: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF5d4037)),
+                    ),
+                  ),
+                  splashRadius: 20,
                 ),
               ),
             ],

@@ -32,13 +32,13 @@ class _ProfilScreenState extends State<ProfilScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
 
-  // Variabel untuk menampung foto profil (URL dari server atau File baru yang dipilih)
+  // Variabel untuk menampung foto profil
   String? _fotoUrl;
   XFile? _selectedImageFile;
 
   final String baseUrl = kIsWeb 
       ? 'http://127.0.0.1:1000/api' 
-      : 'http://10.20.27.124:1000/api';
+      : 'http://192.168.18.65:1000/api';
 
   @override
   void initState() {
@@ -74,13 +74,32 @@ class _ProfilScreenState extends State<ProfilScreen> {
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
         final userData = result['data'];
+        String? fotoPath = userData['foto'];
+
+        // Menyesuaikan URL foto absolut dari Laravel API
+        String? finalFotoUrl;
+        if (fotoPath != null && fotoPath.isNotEmpty) {
+          if (fotoPath.startsWith('http')) {
+            finalFotoUrl = fotoPath;
+            // Penyesuaian khusus untuk Emulator Android jika backend menggunakan localhost/127.0.0.1
+            if (!kIsWeb) {
+              if (finalFotoUrl.contains('127.0.0.1') || finalFotoUrl.contains('localhost')) {
+                finalFotoUrl = finalFotoUrl.replaceAll(RegExp(r'127\.0\.0\.1|localhost'), '10.0.2.2');
+              }
+            }
+          } else {
+            // Cadangan jika server mengirim path relatif
+            final host = kIsWeb ? 'http://127.0.0.1:1000' : 'http://192.168.18.65:1000';
+            finalFotoUrl = '$host/storage/$fotoPath';
+          }
+        }
 
         setState(() {
           _namaController.text = userData['nama'] ?? '';
           _emailController.text = userData['email'] ?? '';
           _noHpController.text = userData['no_hp'] ?? '';
           _alamatController.text = userData['alamat'] ?? '';
-          _fotoUrl = userData['foto']; // Mengambil URL foto dari database
+          _fotoUrl = finalFotoUrl;
         });
       }
     } catch (e) {
@@ -110,7 +129,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? prefs.getString('auth_token');
 
-      // Karena ada upload file foto, kita gunakan http.MultipartRequest (Metode PUT disiasati dengan _method = PUT khas Laravel)
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/profile'));
       
       request.headers.addAll({
@@ -118,8 +136,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
         'Accept': 'application/json',
       });
 
-      // Menambahkan field teks ke multipart request
-      request.fields['_method'] = 'PUT'; // Laravel mendeteksi ini sebagai request PUT
+      request.fields['_method'] = 'PUT';
       request.fields['nama'] = _namaController.text;
       request.fields['no_hp'] = _noHpController.text;
       request.fields['alamat'] = _alamatController.text;
@@ -129,24 +146,16 @@ class _ProfilScreenState extends State<ProfilScreen> {
         request.fields['password_confirmation'] = _confirmPasswordController.text;
       }
 
-      // Jika user memilih foto baru
+      // Gunakan fromBytes agar aman di Web maupun Android/iOS
       if (_selectedImageFile != null) {
-        if (kIsWeb) {
-          // Khusus Flutter Web membaca bytes
-          Uint8List bytes = await _selectedImageFile!.readAsBytes();
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'foto',
-              bytes,
-              filename: _selectedImageFile!.name,
-            ),
-          );
-        } else {
-          // Untuk Android / iOS
-          request.files.add(
-            await http.MultipartFile.fromPath('foto', _selectedImageFile!.path),
-          );
-        }
+        Uint8List bytes = await _selectedImageFile!.readAsBytes();
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'foto',
+            bytes,
+            filename: _selectedImageFile!.name,
+          ),
+        );
       }
 
       var streamedResponse = await request.send();
@@ -155,10 +164,9 @@ class _ProfilScreenState extends State<ProfilScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final result = jsonDecode(response.body);
+        await _fetchProfile();
         setState(() {
-          _fotoUrl = result['data']['foto']; // Perbarui URL foto terbaru dari server
-          _selectedImageFile = null; // Reset pilihan file lokal
+          _selectedImageFile = null; 
         });
 
         _passwordController.clear();
