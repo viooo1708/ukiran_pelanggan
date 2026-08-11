@@ -207,22 +207,27 @@ class _KatalogScreenState extends State<KatalogScreen> {
                                     final token = prefs.getString('auth_token');
 
                                     final response = await http.post(
-                                      Uri.parse('$baseUrl/orders'),
-                                      headers: {
-                                        'Authorization': 'Bearer $token',
-                                        'Accept': 'application/json',
-                                        'Content-Type': 'application/json',
-                                      },
-                                      body: jsonEncode({
-                                        'product_id': product.id,
-                                        'jumlah': jumlah,
-                                        'ukuran': product.ukuran ?? '-',
-                                        'material': product.bahan ?? '-',
-                                        'motif_ukiran': product.motif ?? '-',
-                                        'catatan': catatanController.text,
-                                        'biaya_tambahan': 0,
-                                      }),
-                                    );
+  Uri.parse('$baseUrl/orders'),
+  headers: {
+    'Authorization': 'Bearer $token',
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  },
+  body: jsonEncode({
+    'items': [
+      {
+        'product_id': product.id,
+        'jumlah': jumlah,
+        'ukuran': product.ukuran ?? '-',
+        'material': product.bahan ?? '-',
+        'motif_ukiran': product.jenisUkiran ?? 'Standar', // Ubah ke jenis ukiran atau kosongkan jika tidak ada
+        'catatan': catatanController.text,
+      }
+    ],
+    'biaya_tambahan': 0,
+    'jumlah_dp': 0,
+  }),
+);
 
                                     if (!context.mounted) return;
 

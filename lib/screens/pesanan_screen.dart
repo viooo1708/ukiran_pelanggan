@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class PesananScreen extends StatefulWidget {
   const PesananScreen({Key? key}) : super(key: key);
@@ -179,7 +181,7 @@ class _PesananScreenState extends State<PesananScreen> {
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
           : Column(
               children: [
-                // Bagian Filter Dropdown & Search Bar ala Gambar
+                // Bagian Filter Dropdown & Search Bar
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: Colors.white,
@@ -440,7 +442,9 @@ class _PesananScreenState extends State<PesananScreen> {
   }
 }
 
-// Widget Stateful terpisah untuk Modal Detail dengan Polling Real-time
+// =========================================================================
+// Widget Modal Detail Pesanan
+// =========================================================================
 class _OrderDetailModalContent extends StatefulWidget {
   final int orderId;
   final Map<String, dynamic> initialOrder;
@@ -465,6 +469,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   late Map<String, dynamic> _orderData;
   bool _isLoadingDetail = true;
   bool _isCancelling = false;
+  bool _isLaunchingWhatsApp = false;
   Timer? _timer;
 
   @override
@@ -473,6 +478,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
     _orderData = widget.initialOrder;
     _fetchLatestOrderDetail();
 
+    // Auto-refresh data detail pesanan setiap 5 detik untuk real-time update
     _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
       _fetchLatestOrderDetail(isBackground: true);
     });
@@ -513,6 +519,64 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
     }
   }
 
+  Future<void> _openWhatsApp() async {
+    setState(() => _isLaunchingWhatsApp = true);
+
+    try {
+      // Ambil nama user dari data order
+      final userData = _orderData['user'] ?? {};
+      final userName = userData['name'] ?? userData['nama'] ?? 'Pelanggan';
+      final kodePesanan = _orderData['kode_pesanan'] ?? '-';
+      final estimasiBiaya = _orderData['estimasi_biaya'] ?? 0;
+      
+      // Format rupiah
+      final formattedBiaya = estimasiBiaya.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.');
+
+      // Ambil daftar item produk
+      List items = _orderData['order_items'] ?? _orderData['items'] ?? [];
+      String detailProdukText = "";
+      
+      if (items.isNotEmpty) {
+        for (int i = 0; i < items.length; i++) {
+          final item = items[i];
+          final pName = item['product']?['nama_product'] ?? item['nama_custom'] ?? 'Produk Custom';
+          final qty = item['jumlah'] ?? 1;
+          final ukuran = item['ukuran'] ?? item['specification']?['ukuran'] ?? '-';
+          final material = item['material'] ?? item['specification']?['material'] ?? '-';
+          
+          detailProdukText += "\n- ${i + 1}. *$pName* ($qty Pcs) | Ukuran: $ukuran | Bahan: $material";
+        }
+      } else {
+        detailProdukText = "\n- Pesanan Custom";
+      }
+
+      // Susun Pesan WhatsApp yang rapi
+      final message = "Halo Owner Adi Ukiran, saya *$userName*. Saya ingin menanyakan tentang pesanan saya dengan nomor *$kodePesanan*."
+          "\n\n*Detail Pesanan:*$detailProdukText"
+          "\n\n*Total Biaya:* Rp $formattedBiaya";
+
+      // Nomor WhatsApp Owner (Ganti dengan nomor WhatsApp tujuan owner, misal: 628xxxxxxxxxx)
+      const ownerPhoneNumber = "6283815535218"; 
+
+      final whatsappUrl = "https://wa.me/$ownerPhoneNumber?text=${Uri.encodeComponent(message)}";
+      final Uri uri = Uri.parse(whatsappUrl);
+
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Tidak dapat membuka aplikasi WhatsApp';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFEF4444)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLaunchingWhatsApp = false);
+    }
+  }
+  
   Future<void> _cancelOrder() async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -588,6 +652,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
     final jumlahDp = _orderData['jumlah_dp'] ?? 0;
     final statusPembayaran = _orderData['status_pembayaran'] ?? 'belum_bayar';
     final estimasiWaktu = _orderData['estimasi_waktu'] ?? 'Menunggu konfirmasi';
+    final estimasiSelesai = _orderData['estimasi_selesai'] ?? '-';
     final kodePesanan = _orderData['kode_pesanan'] ?? '-';
     final categoryLabel = widget.getOrderCategoryLabel(_orderData);
     
@@ -610,15 +675,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
     }
 
     List<dynamic> statusHistory = List.from(_orderData['status_history'] ?? []);
-    
-    bool hasCancelledInHistory = statusHistory.any((h) => (h['status'] ?? '').toString().toLowerCase() == 'dibatalkan');
-    if (statusPesanan.toLowerCase() == 'dibatalkan' && !hasCancelledInHistory) {
-      statusHistory.insert(0, {
-        'status': 'dibatalkan',
-        'keterangan': 'Pesanan telah dibatalkan oleh pelanggan.',
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    }
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.88,
@@ -626,370 +682,383 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      child: Column(
+      child: Stack(
         children: [
-          const SizedBox(height: 16),
-          Container(
-            width: 48,
-            height: 5,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'Detail Pesanan ($kodePesanan)',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF3E2723)),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF5D4037).withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          categoryLabel.toUpperCase(),
-                          style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF5D4037)),
-                        ),
-                      ),
-                    ],
-                  ),
+          Column(
+            children: [
+              const SizedBox(height: 16),
+              Container(
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5E7EB),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Color(0xFF6B7280)),
-                  onPressed: () => Navigator.pop(context),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Detail Pesanan ($kodePesanan)',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF3E2723)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF5D4037).withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              categoryLabel.toUpperCase(),
+                              style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF5D4037)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF6B7280)),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const Divider(color: Color(0xFFEADFD8), height: 1),
-          Expanded(
-            child: _isLoadingDetail && statusHistory.isEmpty
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
-                : ListView(
-                    padding: const EdgeInsets.all(24),
-                    physics: const BouncingScrollPhysics(),
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDFBF7),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFEADFD8)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Status Pesanan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: widget.getStatusColor(statusPesanan).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    statusPesanan.replaceAll('_', ' ').toUpperCase(),
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: widget.getStatusColor(statusPesanan)),
-                                  ),
-                                ),
-                              ],
+              ),
+              const Divider(color: Color(0xFFEADFD8), height: 1),
+              Expanded(
+                child: _isLoadingDetail && statusHistory.isEmpty
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
+                    : ListView(
+                        // Padding bawah dilebihkan agar konten terbawah tidak tertutup tombol mengambang WhatsApp
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
+                        physics: const BouncingScrollPhysics(),
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFDFBF7),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFEADFD8)),
                             ),
-                            const SizedBox(height: 16),
-                            _buildSpecRow('Kategori / Tahapan', categoryLabel.toUpperCase(), valueColor: const Color(0xFF5D4037)),
-                            const Divider(height: 16, color: Color(0xFFEADFD8)),
-                            _buildSpecRow('Tanggal & Waktu Pesanan', tanggal),
-                            const Divider(height: 16, color: Color(0xFFEADFD8)),
-                            _buildSpecRow('Estimasi Waktu', estimasiWaktu, valueColor: const Color(0xFFB45309)),
-                            const Divider(height: 16, color: Color(0xFFEADFD8)),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Total Estimasi Biaya', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
-                                Text(
-                                  'Rp ${estimasiBiaya.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
-                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFFB45309)),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 16, color: Color(0xFFEADFD8)),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Jumlah DP (Uang Muka)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
-                                Text(
-                                  'Rp ${jumlahDp.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 16, color: Color(0xFFEADFD8)),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Status Pembayaran', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: statusPembayaran == 'lunas' 
-                                        ? const Color(0xFF059669).withOpacity(0.1) 
-                                        : (statusPembayaran == 'dp_dibayar' ? const Color(0xFFB45309).withOpacity(0.1) : const Color(0xFF6B7280).withOpacity(0.1)),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    statusPembayaran.replaceAll('_', ' ').toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 10, 
-                                      fontWeight: FontWeight.w800, 
-                                      color: statusPembayaran == 'lunas' 
-                                          ? const Color(0xFF059669) 
-                                          : (statusPembayaran == 'dp_dibayar' ? const Color(0xFFB45309) : const Color(0xFF6B7280)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Status Pesanan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: widget.getStatusColor(statusPesanan).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        statusPesanan.replaceAll('_', ' ').toUpperCase(),
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: widget.getStatusColor(statusPesanan)),
+                                      ),
                                     ),
-                                  ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                _buildSpecRow('Kategori / Tahapan', categoryLabel.toUpperCase(), valueColor: const Color(0xFF5D4037)),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                _buildSpecRow('Tanggal & Waktu Pesanan', tanggal),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                _buildSpecRow('Estimasi Waktu', estimasiWaktu, valueColor: const Color(0xFFB45309)),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                _buildSpecRow('Perkiraan Tanggal Selesai', estimasiSelesai, valueColor: const Color(0xFF059669)),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Total Estimasi Biaya', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
+                                    Text(
+                                      'Rp ${estimasiBiaya.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFFB45309)),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Jumlah DP (Uang Muka)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
+                                    Text(
+                                      'Rp ${jumlahDp.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Status Pembayaran', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF6B7280))),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: statusPembayaran == 'lunas' 
+                                            ? const Color(0xFF059669).withOpacity(0.1) 
+                                            : (statusPembayaran == 'dp_dibayar' ? const Color(0xFFB45309).withOpacity(0.1) : const Color(0xFF6B7280).withOpacity(0.1)),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        statusPembayaran.replaceAll('_', ' ').toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 10, 
+                                          fontWeight: FontWeight.w800, 
+                                          color: statusPembayaran == 'lunas' 
+                                              ? const Color(0xFF059669) 
+                                              : (statusPembayaran == 'dp_dibayar' ? const Color(0xFFB45309) : const Color(0xFF6B7280)),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
+                            ),
+                          ),
+                          
+                          if (statusPesanan.toLowerCase() == 'menunggu_konfirmasi') ...[
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _isCancelling ? null : _cancelOrder,
+                                icon: _isCancelling 
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
+                                    : const Icon(Icons.cancel_outlined, size: 18, color: Color(0xFFEF4444)),
+                                label: Text(
+                                  _isCancelling ? 'Memproses...' : 'Batalkan Pesanan', 
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFEF4444)),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFEF4444)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
                             ),
                           ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChatScreen(
-                                  orderId: widget.orderId,
-                                  kodePesanan: kodePesanan,
-                                  baseUrl: widget.baseUrl,
-                                ),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18, color: Colors.white),
-                          label: const Text('Diskusi & Chat dengan Owner', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF5D4037),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
-                          ),
-                        ),
-                      ),
 
-                      if (statusPesanan.toLowerCase() == 'menunggu_konfirmasi') ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _isCancelling ? null : _cancelOrder,
-                            icon: _isCancelling 
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
-                                : const Icon(Icons.cancel_outlined, size: 18, color: Color(0xFFEF4444)),
-                            label: Text(
-                              _isCancelling ? 'Memproses...' : 'Batalkan Pesanan', 
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFEF4444)),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFFEF4444)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      ],
+                          const SizedBox(height: 24),
+                          const Text('Daftar Produk Pesanan', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
+                          const SizedBox(height: 10),
+                          ...orderItems.map((item) {
+                            final productName = item['product']?['nama_product'] ?? item['nama_custom'] ?? 'Produk Custom';
+                            final jumlah = item['jumlah'] ?? 1;
+                            final ukuran = item['ukuran'] ?? item['specification']?['ukuran'] ?? '-';
+                            final material = item['material'] ?? item['specification']?['material'] ?? '-';
+                            final motif = item['motif_ukiran'] ?? item['motif'] ?? item['specification']?['motif_ukiran'] ?? '-';
+                            
+                            final rawSubtotal = item['subtotal'] ?? item['estimasi_biaya'] ?? 0;
+                            final num subtotal = num.tryParse(rawSubtotal.toString()) ?? 0;
 
-                      const SizedBox(height: 24),
-                      const Text('Daftar Produk Pesanan', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
-                      const SizedBox(height: 10),
-                      ...orderItems.map((item) {
-                        final productName = item['product']?['nama_product'] ?? item['nama_custom'] ?? 'Produk Custom';
-                        final jumlah = item['jumlah'] ?? 1;
-                        final ukuran = item['ukuran'] ?? item['specification']?['ukuran'] ?? '-';
-                        final material = item['material'] ?? item['specification']?['material'] ?? '-';
-                        final motif = item['motif_ukiran'] ?? item['motif'] ?? item['specification']?['motif_ukiran'] ?? '-';
-                        
-                        final rawSubtotal = item['subtotal'] ?? item['estimasi_biaya'] ?? 0;
-                        final num subtotal = num.tryParse(rawSubtotal.toString()) ?? 0;
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFEADFD8)),
-                            boxShadow: [
-                              BoxShadow(color: const Color(0xFF5D4037).withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4)),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      productName,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF3E2723)),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF5D4037).withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text('$jumlah Pcs', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
-                                  ),
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFEADFD8)),
+                                boxShadow: [
+                                  BoxShadow(color: const Color(0xFF5D4037).withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4)),
                                 ],
                               ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 10.0),
-                                child: Divider(height: 1, color: Color(0xFFEADFD8)),
-                              ),
-                              _buildSpecRow('Ukuran', ukuran),
-                              const SizedBox(height: 6),
-                              _buildSpecRow('Material / Bahan', material),
-                              const SizedBox(height: 6),
-                              _buildSpecRow('Motif Ukiran', motif),
-                              if (subtotal > 0) ...[
-                                const SizedBox(height: 6),
-                                _buildSpecRow(
-                                  'Subtotal', 
-                                  'Rp ${subtotal.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
-                                  valueColor: const Color(0xFFB45309),
-                                ),
-                              ],
-                            ],
-                          ),
-                        );
-                      }).toList(),
-
-                      const SizedBox(height: 16),
-                      const Text('Catatan Tambahan', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDFBF7),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFEADFD8)),
-                        ),
-                        child: Text(catatan, style: const TextStyle(fontSize: 12.5, color: Color(0xFF6B7280), fontStyle: FontStyle.italic, height: 1.4)),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      const Text('Riwayat Status Produksi', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
-                      const SizedBox(height: 10),
-                      statusHistory.isEmpty
-                          ? const Text('Belum ada riwayat progres status.', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: statusHistory.length,
-                              itemBuilder: (context, idx) {
-                                final history = statusHistory[idx];
-                                final rawDate = history['created_at'] ?? history['tanggal_update'] ?? '';
-                                String formattedDate = '-';
-                                
-                                if (rawDate.isNotEmpty) {
-                                  try {
-                                    DateTime parsedDate = DateTime.parse(rawDate).toLocal();
-                                    formattedDate = "${parsedDate.day.toString().padLeft(2, '0')}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.year} "
-                                        "${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
-                                  } catch (e) {
-                                    formattedDate = rawDate;
-                                  }
-                                }
-
-                                final bool isCancelledHistory = (history['status'] ?? '').toString().toLowerCase() == 'dibatalkan';
-
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Column(
-                                        children: [
-                                          Container(
-                                            width: 10,
-                                            height: 10,
-                                            decoration: BoxDecoration(
-                                              color: isCancelledHistory ? const Color(0xFFEF4444) : const Color(0xFF5D4037),
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                          if (idx != statusHistory.length - 1)
-                                            Container(
-                                              width: 2,
-                                              height: 45,
-                                              color: const Color(0xFFEADFD8),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(width: 12),
                                       Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Text(
-                                                  (history['status'] ?? '').toString().replaceAll('_', ' ').toUpperCase(),
-                                                  style: TextStyle(
-                                                    fontSize: 12, 
-                                                    fontWeight: FontWeight.bold, 
-                                                    color: isCancelledHistory ? const Color(0xFFEF4444) : const Color(0xFF3E2723),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  formattedDate,
-                                                  style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w600),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              history['keterangan'] ?? (isCancelledHistory ? 'Pesanan telah dibatalkan oleh pelanggan.' : 'Tidak ada keterangan.'),
-                                              style: TextStyle(
-                                                fontSize: 11.5, 
-                                                color: isCancelledHistory ? const Color(0xFFEF4444) : const Color(0xFF6B7280),
-                                              ),
-                                            ),
-                                          ],
+                                        child: Text(
+                                          productName,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF3E2723)),
                                         ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF5D4037).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text('$jumlah Pcs', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
                                       ),
                                     ],
                                   ),
-                                );
-                              },
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 10.0),
+                                    child: Divider(height: 1, color: Color(0xFFEADFD8)),
+                                  ),
+                                  _buildSpecRow('Ukuran', ukuran),
+                                  const SizedBox(height: 6),
+                                  _buildSpecRow('Material / Bahan', material),
+                                  const SizedBox(height: 6),
+                                  _buildSpecRow('Motif Ukiran', motif),
+                                  if (subtotal > 0) ...[
+                                    const SizedBox(height: 6),
+                                    _buildSpecRow(
+                                      'Subtotal', 
+                                      'Rp ${subtotal.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                                      valueColor: const Color(0xFFB45309),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          }).toList(),
+
+                          const SizedBox(height: 16),
+                          const Text('Catatan Tambahan', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFDFBF7),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFEADFD8)),
                             ),
-                      const SizedBox(height: 30),
-                    ],
-                  ),
+                            child: Text(catatan, style: const TextStyle(fontSize: 12.5, color: Color(0xFF6B7280), fontStyle: FontStyle.italic, height: 1.4)),
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          const Text('Riwayat Status Produksi', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF3E2723))),
+                          const SizedBox(height: 10),
+                          statusHistory.isEmpty
+                              ? const Text('Belum ada riwayat progres status.', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)))
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: statusHistory.length,
+                                  itemBuilder: (context, idx) {
+                                    final history = statusHistory[idx];
+                                    final rawDate = history['tanggal_update'] ?? history['created_at'] ?? '';
+                                    String formattedDate = '-';
+                                    
+                                    if (rawDate.isNotEmpty) {
+                                      try {
+                                        DateTime parsedDate = DateTime.parse(rawDate).toLocal();
+                                        formattedDate = "${parsedDate.day.toString().padLeft(2, '0')}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.year} "
+                                            "${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
+                                      } catch (e) {
+                                        formattedDate = rawDate;
+                                      }
+                                    }
+
+                                    final bool isCancelledHistory = (history['status'] ?? '').toString().toLowerCase() == 'dibatalkan';
+
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Column(
+                                            children: [
+                                              Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: BoxDecoration(
+                                                  color: isCancelledHistory ? const Color(0xFFEF4444) : const Color(0xFF5D4037),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                              if (idx != statusHistory.length - 1)
+                                                Container(
+                                                  width: 2,
+                                                  height: 45,
+                                                  color: const Color(0xFFEADFD8),
+                                                ),
+                                            ],
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Text(
+                                                      (history['status'] ?? '').toString().replaceAll('_', ' ').toUpperCase(),
+                                                      style: TextStyle(
+                                                        fontSize: 12, 
+                                                        fontWeight: FontWeight.bold, 
+                                                        color: isCancelledHistory ? const Color(0xFFEF4444) : const Color(0xFF3E2723),
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      formattedDate,
+                                                      style: const TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w600),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  history['keterangan'] ?? (isCancelledHistory ? 'Pesanan telah dibatalkan.' : 'Tidak ada keterangan.'),
+                                                  style: TextStyle(
+                                                    fontSize: 11.5, 
+                                                    color: isCancelledHistory ? const Color(0xFFEF4444) : const Color(0xFF6B7280),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                          const SizedBox(height: 30),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+
+          // Tombol WhatsApp Mengambang (Floating Balon di Pojok Kanan Bawah)
+          Positioned(
+            right: 20,
+            bottom: 20,
+            child: GestureDetector(
+              onTap: _isLaunchingWhatsApp ? null : _openWhatsApp,
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF25D366),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF25D366).withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Center(
+  child: _isLaunchingWhatsApp
+      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+      : const FaIcon(
+          FontAwesomeIcons.whatsapp, 
+          color: Colors.white, 
+          size: 30,
+        ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1003,243 +1072,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
         Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
         Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: valueColor ?? const Color(0xFF3E2723))),
       ],
-    );
-  }
-}
-
-// ==========================================
-// LAYAR CHAT FLUTTER (CHAT SCREEN)
-// ==========================================
-class ChatScreen extends StatefulWidget {
-  final int orderId;
-  final String kodePesanan;
-  final String baseUrl;
-
-  const ChatScreen({
-    Key? key,
-    required this.orderId,
-    required this.kodePesanan,
-    required this.baseUrl,
-  }) : super(key: key);
-
-  @override
-  State<ChatScreen> createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends State<ChatScreen> {
-  List<dynamic> _messages = [];
-  bool _isLoading = true;
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  Timer? _pollingTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchMessages();
-
-    _pollingTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      _fetchMessages(isBackground: true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _fetchMessages({bool isBackground = false}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-
-      final response = await http.get(
-        Uri.parse('${widget.baseUrl}/orders/${widget.orderId}/chats'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        if (mounted) {
-          setState(() {
-            _messages = decoded['data'] ?? [];
-            if (!isBackground) _isLoading = false;
-          });
-          if (!isBackground) _scrollToBottom();
-        }
-      } else {
-        if (!isBackground && mounted) setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      if (!isBackground && mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-
-    _messageController.clear();
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
-
-      final response = await http.post(
-        Uri.parse('${widget.baseUrl}/orders/${widget.orderId}/chats'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'message': text}),
-      );
-
-      if (response.statusCode == 201) {
-        _fetchMessages(isBackground: true);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal mengirim pesan'), backgroundColor: Color(0xFFEF4444)),
-      );
-    }
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFDFBF7),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF3E2723)),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Chat Diskusi Owner', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF3E2723))),
-            Text('Pesanan: ${widget.kodePesanan}', style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280))),
-          ],
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: const Color(0xFFEADFD8), height: 1),
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
-                : _messages.isEmpty
-                    ? const Center(child: Text('Belum ada pesan. Mulai diskusi sekarang!', style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))))
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final msg = _messages[index];
-                          final isMe = msg['sender']?['id'] != 1;
-
-                          return Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                              decoration: BoxDecoration(
-                                color: isMe ? const Color(0xFF5D4037) : Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: isMe ? null : Border.all(color: const Color(0xFFEADFD8)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    msg['sender']?['name'] ?? 'User',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isMe ? Colors.white70 : const Color(0xFF5D4037),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    msg['message'] ?? '',
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: isMe ? Colors.white : const Color(0xFF3E2723),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: Colors.white,
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: 'Tulis pesan...',
-                      hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
-                      filled: true,
-                      fillColor: const Color(0xFFFDFBF7),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFEADFD8)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFEADFD8)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF5D4037)),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _sendMessage,
-                  icon: const Icon(Icons.send_rounded, color: Color(0xFF5D4037)),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFEADFD8).withOpacity(0.5),
-                    padding: const EdgeInsets.all(10),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

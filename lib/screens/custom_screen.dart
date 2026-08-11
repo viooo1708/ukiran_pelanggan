@@ -184,18 +184,22 @@ class _CustomScreenState extends State<CustomScreen> {
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json';
 
+      // Bungkus ke format items[0] agar terbaca oleh validasi array items di Laravel
       if (_selectedProductId == 'OTHER') {
-        request.fields['nama_custom'] = _customProductController.text.trim();
+        request.fields['items[0][nama_custom]'] = _customProductController.text.trim();
       } else if (_selectedProductId != null) {
-        request.fields['product_id'] = _selectedProductId.toString();
+        request.fields['items[0][product_id]'] = _selectedProductId.toString();
       }
 
-      request.fields['jumlah'] = _jumlahController.text;
-      request.fields['ukuran'] = _selectedUkuran == 'OTHER' ? _customUkuranController.text : (_selectedUkuran ?? '');
-      request.fields['material'] = _selectedBahan == 'OTHER' ? _customBahanController.text : (_selectedBahan ?? '');
-      request.fields['motif_ukiran'] = _selectedJenisUkiran == 'OTHER' ? _customJenisUkiranController.text : (_selectedJenisUkiran ?? '');
-      request.fields['motif'] = _selectedMotif == 'OTHER' ? _customMotifController.text : (_selectedMotif ?? '');
-      request.fields['catatan'] = _catatanController.text;
+      request.fields['items[0][jumlah]'] = _jumlahController.text;
+      request.fields['items[0][ukuran]'] = _selectedUkuran == 'OTHER' ? _customUkuranController.text : (_selectedUkuran ?? '');
+      request.fields['items[0][material]'] = _selectedBahan == 'OTHER' ? _customBahanController.text : (_selectedBahan ?? '');
+      request.fields['items[0][motif_ukiran]'] = _selectedJenisUkiran == 'OTHER' ? _customJenisUkiranController.text : (_selectedJenisUkiran ?? '');
+      request.fields['items[0][catatan]'] = _catatanController.text;
+
+      // Field tambahan di luar items
+      request.fields['biaya_tambahan'] = '0';
+      request.fields['jumlah_dp'] = '0';
 
       if (_selectedImageFile != null) {
         if (kIsWeb) {
