@@ -25,7 +25,11 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Fetch notifikasi lama
       Provider.of<NotificationProvider>(context, listen: false).fetchNotifications();
+      
+      // === TAMBAHKAN INI: Inisialisasi FCM & Minta Izin Token saat masuk MainScreen ===
+      Provider.of<NotificationProvider>(context, listen: false).initFCM();
     });
   }
 
@@ -242,7 +246,6 @@ class _MainScreenState extends State<MainScreen> {
               ],
             ),
             actions: [
-              // Tombol Notifikasi
               Padding(
                 padding: const EdgeInsets.only(right: 4.0),
                 child: Consumer<NotificationProvider>(
@@ -273,8 +276,6 @@ class _MainScreenState extends State<MainScreen> {
                   },
                 ),
               ),
-              
-              // Tombol Keranjang Belanja (Tepat di sebelah kanan notifikasi)
               Padding(
                 padding: const EdgeInsets.only(right: 12.0),
                 child: IconButton(

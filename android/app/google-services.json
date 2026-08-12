@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1008809258913",
+    "project_id": "adi-ukiran",
+    "storage_bucket": "adi-ukiran.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1008809258913:android:03e64b786c2647edf0e5e0",
+        "android_client_info": {
+          "package_name": "com.example.ukiran_pelanggan"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAn3bBkyMrfYJaYIlzNfQ5GrSRqqlPLW4w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

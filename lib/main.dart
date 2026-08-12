@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart'; // Import Google Fonts
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'providers/auth_provider.dart';
 import 'providers/product_provider.dart';
 import 'screens/splash_screen.dart';
 import 'providers/notification_provider.dart';
 import 'providers/cart_provider.dart';
 
-void main() {
+// Handler untuk menangani pesan saat aplikasi di background / terminated
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint("Handling a background message: ${message.messageId}");
+}
+
+void main() async {
+  // Pastikan binding widget Flutter sudah terinisialisasi
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inisialisasi Firebase
+  await Firebase.initializeApp();
+  
+  // Daftarkan background messaging handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   runApp(
     MultiProvider(
       providers: [
