@@ -8,6 +8,7 @@ import '../providers/product_provider.dart';
 import '../providers/cart_provider.dart';
 import '../models/product_model.dart';
 import '../models/cart_item.dart';
+import '../services/api_service.dart'; // Import ApiService
 
 class KatalogScreen extends StatefulWidget {
   const KatalogScreen({Key? key}) : super(key: key);
@@ -21,10 +22,8 @@ class _KatalogScreenState extends State<KatalogScreen> {
   String _selectedCategoryFilter = 'Semua Kategori';
   final TextEditingController _searchController = TextEditingController();
 
-  // URL Base otomatis mendeteksi Web vs Android
-  final String baseUrl = kIsWeb 
-      ? 'http://127.0.0.1:1000/api' 
-      : 'http://192.168.18.65:1000/api';
+  // Menggunakan baseUrl terpusat dari ApiService
+  final String baseUrl = ApiService.baseUrl;
 
   @override
   void initState() {
@@ -62,7 +61,8 @@ class _KatalogScreenState extends State<KatalogScreen> {
       return correctedUrl;
     }
 
-    final String host = kIsWeb ? 'http://127.0.0.1:1000' : 'http://192.168.18.65:1000';
+    // Ambil host dari ApiService.baseUrl dengan menghapus /api di akhir
+    final String host = ApiService.baseUrl.replaceAll('/api', '');
 
     if (gambarPath.startsWith('storage/')) {
       return '$host/$gambarPath';
@@ -207,27 +207,27 @@ class _KatalogScreenState extends State<KatalogScreen> {
                                     final token = prefs.getString('auth_token');
 
                                     final response = await http.post(
-  Uri.parse('$baseUrl/orders'),
-  headers: {
-    'Authorization': 'Bearer $token',
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  },
-  body: jsonEncode({
-    'items': [
-      {
-        'product_id': product.id,
-        'jumlah': jumlah,
-        'ukuran': product.ukuran ?? '-',
-        'material': product.bahan ?? '-',
-        'motif_ukiran': product.jenisUkiran ?? 'Standar', // Ubah ke jenis ukiran atau kosongkan jika tidak ada
-        'catatan': catatanController.text,
-      }
-    ],
-    'biaya_tambahan': 0,
-    'jumlah_dp': 0,
-  }),
-);
+                                      Uri.parse('$baseUrl/orders'),
+                                      headers: {
+                                        'Authorization': 'Bearer $token',
+                                        'Accept': 'application/json',
+                                        'Content-Type': 'application/json',
+                                      },
+                                      body: jsonEncode({
+                                        'items': [
+                                          {
+                                            'product_id': product.id,
+                                            'jumlah': jumlah,
+                                            'ukuran': product.ukuran ?? '-',
+                                            'material': product.bahan ?? '-',
+                                            'motif_ukiran': product.jenisUkiran ?? 'Standar',
+                                            'catatan': catatanController.text,
+                                          }
+                                        ],
+                                        'biaya_tambahan': 0,
+                                        'jumlah_dp': 0,
+                                      }),
+                                    );
 
                                     if (!context.mounted) return;
 
@@ -475,7 +475,6 @@ class _KatalogScreenState extends State<KatalogScreen> {
   Widget build(BuildContext context) {
     final productProvider = Provider.of<ProductProvider>(context);
 
-    // Ambil daftar kategori unik dari produk yang ada untuk opsi dropdown filter
     List<String> categories = ['Semua Kategori'];
     for (var prod in productProvider.products) {
       final jenis = prod.jenisUkiran ?? 'Kriya Ukir';
@@ -487,7 +486,6 @@ class _KatalogScreenState extends State<KatalogScreen> {
       _selectedCategoryFilter = 'Semua Kategori';
     }
 
-    // Filter produk berdasarkan Kategori dan Pencarian
     List<Product> filteredProducts = productProvider.products.where((product) {
       final jenis = product.jenisUkiran ?? 'Kriya Ukir';
       bool matchesCategory = _selectedCategoryFilter == 'Semua Kategori' || jenis == _selectedCategoryFilter;
@@ -499,12 +497,10 @@ class _KatalogScreenState extends State<KatalogScreen> {
       color: Colors.transparent,
       child: Column(
         children: [
-          // Filter Dropdown Kategori & Search Bar ala Gambar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Row(
               children: [
-                // Dropdown Filter Kategori
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
@@ -532,7 +528,6 @@ class _KatalogScreenState extends State<KatalogScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Kolom Pencarian
                 Expanded(
                   child: TextField(
                     controller: _searchController,
@@ -564,7 +559,6 @@ class _KatalogScreenState extends State<KatalogScreen> {
             ),
           ),
           
-          // Grid Produk
           Expanded(
             child: productProvider.isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))

@@ -1,13 +1,13 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Gunakan IP lokal komputer Anda jika testing di HP fisik, 
-  // atau 10.0.2.2 jika menggunakan Emulator Android.
-  // static const String baseUrl = 'http://10.0.2.2:1000/api';
-  // static const String baseUrl = 'http://127.0.0.1:1000/api';
-  static const String baseUrl = 'http://192.168.18.65:1000/api';
+  // Base URL terpusat dengan deteksi platform otomatis
+  static final String baseUrl = kIsWeb 
+      ? 'http://127.0.0.1:1000/api' 
+      : 'http://192.168.18.65:1000/api';
 
   // Menyimpan token ke SharedPreferences
   Future<void> saveToken(String token) async {

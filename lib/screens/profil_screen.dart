@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart'; // Import ApiService
 import 'login_screen.dart';
 
 class ProfilScreen extends StatefulWidget {
@@ -36,9 +37,8 @@ class _ProfilScreenState extends State<ProfilScreen> {
   String? _fotoUrl;
   XFile? _selectedImageFile;
 
-  final String baseUrl = kIsWeb 
-      ? 'http://127.0.0.1:1000/api' 
-      : 'http://192.168.18.65:1000/api';
+  // Menggunakan baseUrl terpusat dari ApiService
+  final String baseUrl = ApiService.baseUrl;
 
   @override
   void initState() {
@@ -88,8 +88,8 @@ class _ProfilScreenState extends State<ProfilScreen> {
               }
             }
           } else {
-            // Cadangan jika server mengirim path relatif
-            final host = kIsWeb ? 'http://127.0.0.1:1000' : 'http://192.168.18.65:1000';
+            // Cadangan jika server mengirim path relatif dengan mengambil host dari ApiService.baseUrl
+            final host = ApiService.baseUrl.replaceAll('/api', '');
             finalFotoUrl = '$host/storage/$fotoPath';
           }
         }

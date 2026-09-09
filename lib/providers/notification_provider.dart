@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/notification_model.dart';
+import '../services/api_service.dart'; // Import ApiService
 
 class NotificationProvider with ChangeNotifier {
   List<NotificationModel> _notifications = [];
@@ -14,11 +15,8 @@ class NotificationProvider with ChangeNotifier {
 
   bool get hasUnread => _notifications.any((n) => !n.isRead);
 
-  // Sesuaikan URL base ini dengan port Laravel Anda (misal: 1000, 8000, dll)
-  final String baseUrl = kIsWeb 
-      ? 'http://127.0.0.1:1000/api' 
-      : 'http://192.168.18.65:1000/api';
-      
+  // Menggunakan baseUrl terpusat dari ApiService
+  final String baseUrl = ApiService.baseUrl;
 
   // Fungsi untuk Inisialisasi FCM & Mengirim Token ke Backend Laravel
   Future<void> initFCM() async {
@@ -79,7 +77,6 @@ class NotificationProvider with ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Pastikan key ini sama persis dengan yang disimpan saat login/register ('token' atau 'auth_token')
       final token = prefs.getString('token') ?? prefs.getString('auth_token');
 
       debugPrint("DEBUG TOKEN NOTIF: $token");

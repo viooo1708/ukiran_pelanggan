@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../providers/cart_provider.dart';
+import '../services/api_service.dart'; // Import ApiService
 
 class CartScreen extends StatefulWidget {
   const CartScreen({Key? key}) : super(key: key);
@@ -16,9 +16,8 @@ class CartScreen extends StatefulWidget {
 class _CartScreenState extends State<CartScreen> {
   bool _isCheckingOut = false;
 
-  final String baseUrl = kIsWeb 
-      ? 'http://127.0.0.1:1000/api' 
-      : 'http://192.168.18.65:1000/api';
+  // Menggunakan baseUrl terpusat dari ApiService
+  final String baseUrl = ApiService.baseUrl;
 
   // --- DIALOG KONFIRMASI HAPUS SATU ITEM ---
   void _showDeleteConfirmation(BuildContext context, int index, String productName) {
@@ -54,71 +53,69 @@ class _CartScreenState extends State<CartScreen> {
 
   // --- PROSES CHECKOUT SEMUA ITEM ---
   Future<void> _processCheckout(BuildContext context, CartProvider cartProvider) async {
-  if (cartProvider.items.isEmpty) return;
+    if (cartProvider.items.isEmpty) return;
 
-  setState(() => _isCheckingOut = true);
+    setState(() => _isCheckingOut = true);
 
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
 
-    // Ubah list item keranjang menjadi format array JSON "items"
-    final List<Map<String, dynamic>> itemsPayload = cartProvider.items.map((cartItem) {
-      return {
-        'product_id': cartItem.product.id,
-        'jumlah': cartItem.jumlah,
-        'ukuran': cartItem.ukuran,
-        'material': cartItem.material,
-        'motif_ukiran': cartItem.motif,
-        'catatan': cartItem.catatan,
-      };
-    }).toList();
+      final List<Map<String, dynamic>> itemsPayload = cartProvider.items.map((cartItem) {
+        return {
+          'product_id': cartItem.product.id,
+          'jumlah': cartItem.jumlah,
+          'ukuran': cartItem.ukuran,
+          'material': cartItem.material,
+          'motif_ukiran': cartItem.motif,
+          'catatan': cartItem.catatan,
+        };
+      }).toList();
 
-    // Kirim SEKALI REQUEST saja untuk seluruh keranjang
-    final response = await http.post(
-      Uri.parse('$baseUrl/orders'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'items': itemsPayload,
-        'biaya_tambahan': 0,
-        'jumlah_dp': 0, // Sesuaikan jika ada input DP
-      }),
-    );
-
-    if (!context.mounted) return;
-
-    setState(() => _isCheckingOut = false);
-
-    if (response.statusCode == 201) {
-      cartProvider.clearCart(); // Kosongkan keranjang setelah berhasil
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Checkout berhasil! Pesanan Anda telah dibuat.'),
-          backgroundColor: const Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
+      final response = await http.post(
+        Uri.parse('$baseUrl/orders'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'items': itemsPayload,
+          'biaya_tambahan': 0,
+          'jumlah_dp': 0,
+        }),
       );
-      Navigator.pop(context); 
-    } else {
-      final decoded = jsonDecode(response.body);
-      final message = decoded['message'] ?? 'Gagal memproses checkout.';
+
+      if (!context.mounted) return;
+
+      setState(() => _isCheckingOut = false);
+
+      if (response.statusCode == 201) {
+        cartProvider.clearCart();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Checkout berhasil! Pesanan Anda telah dibuat.'),
+            backgroundColor: const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        Navigator.pop(context); 
+      } else {
+        final decoded = jsonDecode(response.body);
+        final message = decoded['message'] ?? 'Gagal memproses checkout.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      setState(() => _isCheckingOut = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+        SnackBar(content: Text('Kesalahan koneksi saat checkout: $e'), backgroundColor: Colors.red),
       );
     }
-  } catch (e) {
-    if (!context.mounted) return;
-    setState(() => _isCheckingOut = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Kesalahan koneksi saat checkout: $e'), backgroundColor: Colors.red),
-    );
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -197,8 +194,6 @@ class _CartScreenState extends State<CartScreen> {
                               ],
                             ),
                           ),
-                          
-                          // Tombol Tambah & Kurang Kuantitas
                           Row(
                             children: [
                               IconButton(
@@ -231,8 +226,6 @@ class _CartScreenState extends State<CartScreen> {
                             ],
                           ),
                           const SizedBox(width: 8),
-
-                          // Tombol Hapus Item
                           IconButton(
                             constraints: const BoxConstraints(),
                             padding: EdgeInsets.zero,

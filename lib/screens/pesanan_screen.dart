@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../services/api_service.dart'; // Import ApiService
 
 class PesananScreen extends StatefulWidget {
   const PesananScreen({Key? key}) : super(key: key);
@@ -23,9 +23,8 @@ class _PesananScreenState extends State<PesananScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  final String baseUrl = kIsWeb 
-      ? 'http://127.0.0.1:1000/api' 
-      : 'http://192.168.18.65:1000/api';
+  // Menggunakan baseUrl terpusat dari ApiService
+  final String baseUrl = ApiService.baseUrl;
 
   @override
   void initState() {
@@ -555,7 +554,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
           "\n\n*Detail Pesanan:*$detailProdukText"
           "\n\n*Total Biaya:* Rp $formattedBiaya";
 
-      // Nomor WhatsApp Owner (Ganti dengan nomor WhatsApp tujuan owner, misal: 628xxxxxxxxxx)
+      // Nomor WhatsApp Owner
       const ownerPhoneNumber = "6283815535218"; 
 
       final whatsappUrl = "https://wa.me/$ownerPhoneNumber?text=${Uri.encodeComponent(message)}";
@@ -739,7 +738,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
                 child: _isLoadingDetail && statusHistory.isEmpty
                     ? const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)))
                     : ListView(
-                        // Padding bawah dilebihkan agar konten terbawah tidak tertutup tombol mengambang WhatsApp
                         padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
                         physics: const BouncingScrollPhysics(),
                         children: [
@@ -1028,7 +1026,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
             ],
           ),
 
-          // Tombol WhatsApp Mengambang (Floating Balon di Pojok Kanan Bawah)
+          // Tombol WhatsApp Mengambang
           Positioned(
             right: 20,
             bottom: 20,
@@ -1049,13 +1047,13 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
                   ],
                 ),
                 child: Center(
-  child: _isLaunchingWhatsApp
-      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-      : const FaIcon(
-          FontAwesomeIcons.whatsapp, 
-          color: Colors.white, 
-          size: 30,
-        ),
+                  child: _isLaunchingWhatsApp
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                      : const FaIcon(
+                          FontAwesomeIcons.whatsapp, 
+                          color: Colors.white, 
+                          size: 30,
+                        ),
                 ),
               ),
             ),

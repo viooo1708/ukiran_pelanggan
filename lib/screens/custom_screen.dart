@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:ukiran_pelanggan/screens/main_screen.dart';
 import '../models/attribute_model.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart'; // Import ApiService
 
 class CustomScreen extends StatefulWidget {
   const CustomScreen({Key? key}) : super(key: key);
@@ -44,9 +45,8 @@ class _CustomScreenState extends State<CustomScreen> {
   bool _isLoadingOptions = true;
   bool _isSubmitting = false;
 
-  final String baseUrl = kIsWeb 
-      ? 'http://127.0.0.1:1000/api' 
-      : 'http://192.168.18.65:1000/api'; 
+  // Menggunakan baseUrl terpusat dari ApiService
+  final String baseUrl = ApiService.baseUrl;
 
   @override
   void initState() {
@@ -184,7 +184,6 @@ class _CustomScreenState extends State<CustomScreen> {
       request.headers['Authorization'] = 'Bearer $token';
       request.headers['Accept'] = 'application/json';
 
-      // Bungkus ke format items[0] agar terbaca oleh validasi array items di Laravel
       if (_selectedProductId == 'OTHER') {
         request.fields['items[0][nama_custom]'] = _customProductController.text.trim();
       } else if (_selectedProductId != null) {
@@ -197,7 +196,6 @@ class _CustomScreenState extends State<CustomScreen> {
       request.fields['items[0][motif_ukiran]'] = _selectedJenisUkiran == 'OTHER' ? _customJenisUkiranController.text : (_selectedJenisUkiran ?? '');
       request.fields['items[0][catatan]'] = _catatanController.text;
 
-      // Field tambahan di luar items
       request.fields['biaya_tambahan'] = '0';
       request.fields['jumlah_dp'] = '0';
 
@@ -229,7 +227,7 @@ class _CustomScreenState extends State<CustomScreen> {
           ),
         );
 
-        MainScreen.of(context)?.changeTab(2); // Pindah ke tab Pesanan (indeks 2)
+        MainScreen.of(context)?.changeTab(2);
       } else {
         final errorData = jsonDecode(response.body);
         String errorMessage = 'Gagal membuat pesanan';
@@ -264,7 +262,6 @@ class _CustomScreenState extends State<CustomScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Banner Info
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -307,7 +304,6 @@ class _CustomScreenState extends State<CustomScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 1. PILIH PRODUK REFERENSI / LAINNYA
                   const Text('PRODUK REFERENSI / DASAR', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF6B7280), letterSpacing: 0.8)),
                   const SizedBox(height: 8),
                   Container(
@@ -358,7 +354,6 @@ class _CustomScreenState extends State<CustomScreen> {
                   ],
                   const SizedBox(height: 24),
 
-                  // SPESIFIKASI KRIYA UKIR
                   const Text('SPESIFIKASI KRIYA UKIR', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF6B7280), letterSpacing: 0.8)),
                   const SizedBox(height: 12),
                   
@@ -420,7 +415,6 @@ class _CustomScreenState extends State<CustomScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // UPLOAD GAMBAR
                   const Text('CONTOH GAMBARAN PRODUK (OPSIONAL)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF6B7280), letterSpacing: 0.8)),
                   const SizedBox(height: 8),
                   InkWell(
@@ -481,7 +475,6 @@ class _CustomScreenState extends State<CustomScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // CATATAN
                   _buildTextField(
                     controller: _catatanController,
                     label: 'CATATAN / DETAIL MODEL KHUSUS (OPSIONAL)',
@@ -491,7 +484,6 @@ class _CustomScreenState extends State<CustomScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // TOMBOL SUBMIT
                   SizedBox(
                     width: double.infinity,
                     height: 52,
