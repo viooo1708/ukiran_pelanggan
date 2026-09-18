@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async'; // Ditambahkan untuk Timer polling
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import '../services/api_service.dart'; // Import ApiService
 class NotificationProvider with ChangeNotifier {
   List<NotificationModel> _notifications = [];
   bool _isLoading = false;
+  Timer? _timer; // Timer untuk polling otomatis
 
   List<NotificationModel> get notifications => _notifications;
   bool get isLoading => _isLoading;
@@ -17,6 +19,25 @@ class NotificationProvider with ChangeNotifier {
 
   // Menggunakan baseUrl terpusat dari ApiService
   final String baseUrl = ApiService.baseUrl;
+
+  // Constructor untuk langsung menjalankan polling otomatis saat provider dipanggil
+  NotificationProvider() {
+    _startAutoPolling();
+  }
+
+  // Fungsi untuk menjalankan polling otomatis di latar belakang setiap 10 detik
+  void _startAutoPolling() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      fetchNotifications(isBackground: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   // Fungsi untuk Inisialisasi FCM & Mengirim Token ke Backend Laravel
   Future<void> initFCM() async {
@@ -71,9 +92,12 @@ class NotificationProvider with ChangeNotifier {
     }
   }
 
-  Future<void> fetchNotifications() async {
-    _isLoading = true;
-    notifyListeners();
+  // Modifikasi fetchNotifications agar mendukung background refresh tanpa kedip loading
+  Future<void> fetchNotifications({bool isBackground = false}) async {
+    if (!isBackground) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -96,12 +120,15 @@ class NotificationProvider with ChangeNotifier {
         final data = jsonDecode(response.body);
         final List list = data['data'] ?? [];
         _notifications = list.map((json) => NotificationModel.fromJson(json)).toList();
+        notifyListeners(); // Perbarui UI saat data berhasil ditarik
       }
     } catch (e) {
       debugPrint("Error fetching notifications: $e");
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!isBackground) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

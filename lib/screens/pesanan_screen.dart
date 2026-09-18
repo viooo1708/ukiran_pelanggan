@@ -1,14 +1,12 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-
+import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
 import '../services/api_service.dart';
 
 class PesananScreen extends StatefulWidget {
@@ -21,10 +19,8 @@ class PesananScreen extends StatefulWidget {
 class _PesananScreenState extends State<PesananScreen> {
   List<dynamic> _orders = [];
   bool _isLoading = true;
-
   String _selectedStatusFilter = 'Semua Status';
   String _searchQuery = '';
-
   final TextEditingController _searchController = TextEditingController();
   final String baseUrl = ApiService.baseUrl;
 
@@ -41,9 +37,42 @@ class _PesananScreenState extends State<PesananScreen> {
   }
 
   // ============================================================
+  // FORMAT TANGGAL INDONESIA (HARI, DD BULAN YYYY HH:MM)
+  // ============================================================
+  String _formatCustomDate(String rawDateString, {bool includeTime = true}) {
+    if (rawDateString.isEmpty || rawDateString == '-') return '-';
+    try {
+      DateTime parsedDate = DateTime.parse(rawDateString).toLocal();
+      
+      const List<String> days = [
+        'Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'
+      ];
+      const List<String> months = [
+        '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+
+      String dayName = days[parsedDate.weekday % 7];
+      int day = parsedDate.day;
+      String monthName = months[parsedDate.month];
+      int year = parsedDate.year;
+
+      if (!includeTime) {
+        return "$dayName, $day $monthName $year";
+      }
+
+      String hour = parsedDate.hour.toString().padLeft(2, '0');
+      String minute = parsedDate.minute.toString().padLeft(2, '0');
+
+      return "$dayName, $day $monthName $year $hour:$minute";
+    } catch (e) {
+      return rawDateString;
+    }
+  }
+
+  // ============================================================
   // FORMAT ANGKA
   // ============================================================
-
   num _parseNumber(dynamic value) {
     if (value == null) return 0;
     if (value is num) {
@@ -70,12 +99,10 @@ class _PesananScreenState extends State<PesananScreen> {
   // ============================================================
   // FETCH PESANAN
   // ============================================================
-
   Future<void> _fetchOrders() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
-
       if (token == null || token.isEmpty) {
         if (!mounted) return;
         setState(() => _isLoading = false);
@@ -125,7 +152,6 @@ class _PesananScreenState extends State<PesananScreen> {
   // ============================================================
   // STATUS PESANAN
   // ============================================================
-
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'selesai':
@@ -142,7 +168,6 @@ class _PesananScreenState extends State<PesananScreen> {
   String _getOrderCategoryLabel(Map<String, dynamic> order) {
     final statusPesanan = (order['status_pesanan'] ?? '').toString().toLowerCase();
     final latestStatus = order['latest_status'];
-
     final currentTahap = latestStatus != null
         ? (latestStatus['status'] ?? '').toString().toLowerCase()
         : '';
@@ -172,7 +197,6 @@ class _PesananScreenState extends State<PesananScreen> {
   // ============================================================
   // DETAIL PESANAN
   // ============================================================
-
   void _showOrderDetailModal(BuildContext context, Map<String, dynamic> order) async {
     final result = await showModalBottomSheet(
       context: context,
@@ -185,10 +209,10 @@ class _PesananScreenState extends State<PesananScreen> {
           baseUrl: baseUrl,
           getStatusColor: _getStatusColor,
           getOrderCategoryLabel: _getOrderCategoryLabel,
+          formatCustomDate: _formatCustomDate,
         );
       },
     );
-
     if (result == true) {
       _fetchOrders();
     }
@@ -197,13 +221,11 @@ class _PesananScreenState extends State<PesananScreen> {
   // ============================================================
   // BUILD
   // ============================================================
-
   @override
   Widget build(BuildContext context) {
     List<dynamic> filteredOrders = _orders.where((order) {
       final statusPesanan = (order['status_pesanan'] ?? '').toString().toLowerCase();
       bool matchesStatus = true;
-
       if (_selectedStatusFilter != 'Semua Status') {
         if (_selectedStatusFilter.toLowerCase() == 'menunggu') {
           matchesStatus = statusPesanan == 'menunggu' || statusPesanan == 'menunggu_konfirmasi';
@@ -398,16 +420,8 @@ class _PesananScreenState extends State<PesananScreen> {
                               final estimasiBiaya = _parseNumber(order['estimasi_biaya']);
                               final kodePesanan = order['kode_pesanan'] ?? '-';
                               final rawTanggal = (order['tanggal_pesanan'] ?? '').toString();
-
-                              String tanggal = '-';
-                              if (rawTanggal.isNotEmpty) {
-                                try {
-                                  DateTime parsedDate = DateTime.parse(rawTanggal).toLocal();
-                                  tanggal = "${parsedDate.day.toString().padLeft(2, '0')}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.year} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
-                                } catch (e) {
-                                  tanggal = rawTanggal;
-                                }
-                              }
+                              
+                              final tanggal = _formatCustomDate(rawTanggal);
 
                               return GestureDetector(
                                 onTap: () => _showOrderDetailModal(context, order),
@@ -557,13 +571,13 @@ class _PesananScreenState extends State<PesananScreen> {
 // ============================================================================
 // WIDGET MODAL DETAIL PESANAN
 // ============================================================================
-
 class _OrderDetailModalContent extends StatefulWidget {
   final int orderId;
   final Map<String, dynamic> initialOrder;
   final String baseUrl;
   final Color Function(String) getStatusColor;
   final String Function(Map<String, dynamic>) getOrderCategoryLabel;
+  final String Function(String, {bool includeTime}) formatCustomDate;
 
   const _OrderDetailModalContent({
     Key? key,
@@ -572,6 +586,7 @@ class _OrderDetailModalContent extends StatefulWidget {
     required this.baseUrl,
     required this.getStatusColor,
     required this.getOrderCategoryLabel,
+    required this.formatCustomDate,
   }) : super(key: key);
 
   @override
@@ -580,14 +595,11 @@ class _OrderDetailModalContent extends StatefulWidget {
 
 class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   late Map<String, dynamic> _orderData;
-
   bool _isLoadingDetail = true;
   bool _isCancelling = false;
   bool _isActionLoading = false;
   bool _isLaunchingWhatsApp = false;
-
   final ImagePicker _imagePicker = ImagePicker();
-
   Timer? _timer;
 
   @override
@@ -595,7 +607,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
     super.initState();
     _orderData = widget.initialOrder;
     _fetchLatestOrderDetail();
-
     _timer = Timer.periodic(
       const Duration(seconds: 5),
       (timer) {
@@ -613,7 +624,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // FORMAT ANGKA
   // ============================================================
-
   num _parseNumber(dynamic value) {
     if (value == null) return 0;
     if (value is num) {
@@ -640,8 +650,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // STATUS PEMBAYARAN
   // ============================================================
-
-  String _getPaymentStatusLabel(String status) {
+  String getPaymentStatusLabel(String status) {
     switch (status) {
       case 'menunggu_konfirmasi_biaya':
         return 'Menunggu Persetujuan Biaya';
@@ -658,7 +667,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
       case 'belum_bayar':
         return 'Belum Bayar';
       default:
-        return status.replaceAll('_', ' ').toUpperCase();
+        return status.replaceAll('', ' ').toUpperCase();
     }
   }
 
@@ -683,12 +692,10 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // FETCH DETAIL TERBARU
   // ============================================================
-
   Future<void> _fetchLatestOrderDetail({bool isBackground = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
-
       final response = await http.get(
         Uri.parse('${widget.baseUrl}/orders/${widget.orderId}'),
         headers: {
@@ -722,7 +729,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // AKSI 1: PELANGGAN MENYETUJUI ESTIMASI BIAYA
   // ============================================================
-
   Future<void> _confirmEstimasiBiaya() async {
     final estimasiBiaya = _parseNumber(_orderData['estimasi_biaya']);
     num jumlahDp = _parseNumber(_orderData['jumlah_dp']);
@@ -730,7 +736,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
       jumlahDp = estimasiBiaya * 0.4;
     }
     final sisaPembayaran = estimasiBiaya - jumlahDp;
-
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -844,10 +849,8 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // AKSI 2 & 3: PELANGGAN MENGIRIM BUKTI PEMBAYARAN (DP / LUNAS)
   // ============================================================
-
   Future<void> _sendPaymentProof(String actionName, String dialogTitle, String successMessage) async {
     File? selectedImage;
-
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -974,7 +977,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
 
-      // Karena mengirim file gambar dan method PUT, gunakan http.MultipartRequest dengan _method spoofing Laravel
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('${widget.baseUrl}/orders/${widget.orderId}'),
@@ -1036,10 +1038,8 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // WHATSAPP
   // ============================================================
-
   Future<void> _openWhatsApp() async {
     setState(() => _isLaunchingWhatsApp = true);
-
     try {
       final userData = _orderData['user'] ?? {};
       final userName = userData['name'] ?? userData['nama'] ?? 'Pelanggan';
@@ -1100,7 +1100,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // BATALKAN PESANAN
   // ============================================================
-
   Future<void> _cancelOrder() async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -1148,7 +1147,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
         ],
       ),
     );
-
     if (confirm != true) return;
 
     setState(() => _isCancelling = true);
@@ -1205,12 +1203,10 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
   // ============================================================
   // BUILD DETAIL
   // ============================================================
-
   @override
   Widget build(BuildContext context) {
     final statusPesanan = (_orderData['status_pesanan'] ?? 'menunggu').toString();
     final estimasiBiaya = _parseNumber(_orderData['estimasi_biaya']);
-
     num jumlahDp = _parseNumber(_orderData['jumlah_dp']);
     if (jumlahDp == 0 && estimasiBiaya > 0) {
       jumlahDp = estimasiBiaya * 0.4;
@@ -1219,23 +1215,12 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
 
     final statusPembayaran = (_orderData['status_pembayaran'] ?? 'menunggu_konfirmasi_biaya').toString();
     final biayaDikonfirmasi = _parseBool(_orderData['biaya_dikonfirmasi']);
-    final estimasiWaktu = (_orderData['estimasi_waktu'] ?? 'Menunggu konfirmasi').toString();
     final estimasiSelesai = (_orderData['estimasi_selesai'] ?? '-').toString();
     final kodePesanan = (_orderData['kode_pesanan'] ?? '-').toString();
     final categoryLabel = widget.getOrderCategoryLabel(_orderData);
     final rawTanggal = (_orderData['tanggal_pesanan'] ?? '').toString();
 
-    String tanggal = '-';
-    if (rawTanggal.isNotEmpty) {
-      try {
-        DateTime parsedDate = DateTime.parse(rawTanggal).toLocal();
-        tanggal = "${parsedDate.day.toString().padLeft(2, '0')}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.year} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
-      } catch (e) {
-        tanggal = rawTanggal;
-      }
-    }
-
-    final catatan = (_orderData['catatan'] ?? 'Tidak ada catatan khusus.').toString();
+    final tanggal = widget.formatCustomDate(rawTanggal);
 
     List<dynamic> orderItems = _orderData['order_items'] ?? _orderData['items'] ?? [];
     if (orderItems.isEmpty && (_orderData['product'] != null || _orderData['nama_custom'] != null)) {
@@ -1244,7 +1229,7 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
 
     List<dynamic> statusHistory = List.from(_orderData['status_history'] ?? []);
     final paymentColor = _getPaymentStatusColor(statusPembayaran);
-    final paymentLabel = _getPaymentStatusLabel(statusPembayaran);
+    final paymentLabel = getPaymentStatusLabel(statusPembayaran);
 
     final bool isOrderClosed = statusPesanan.toLowerCase() == 'dibatalkan' || statusPesanan.toLowerCase() == 'selesai';
 
@@ -1335,172 +1320,208 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
                         physics: const BouncingScrollPhysics(),
                         children: [
                           // =================================================
-                        // INFORMASI PESANAN
-                        // =================================================
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFDFBF7),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFEADFD8)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Status Pesanan',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                      color: Color(0xFF3E2723),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: widget.getStatusColor(statusPesanan).withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      statusPesanan.replaceAll('_', ' ').toUpperCase(),
+                          // INFORMASI PESANAN
+                          // =================================================
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFDFBF7),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFEADFD8)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Status Pesanan',
                                       style: TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 13,
                                         fontWeight: FontWeight.w800,
-                                        color: widget.getStatusColor(statusPesanan),
+                                        color: Color(0xFF3E2723),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              _buildSpecRow(
-                                'Kategori / Tahapan',
-                                categoryLabel.toUpperCase(),
-                                valueColor: const Color(0xFF5D4037),
-                              ),
-                              const Divider(height: 16, color: Color(0xFFEADFD8)),
-                              _buildSpecRow(
-                                'Tanggal & Waktu Pesanan',
-                                tanggal,
-                              ),
-                              // Baris 'Estimasi Waktu' dihapus di sini agar konsisten dengan panel owner
-                              const Divider(height: 16, color: Color(0xFFEADFD8)),
-                              _buildSpecRow(
-                                'Perkiraan Tanggal Selesai',
-                                estimasiSelesai,
-                                valueColor: const Color(0xFF059669),
-                              ),
-                              const Divider(height: 16, color: Color(0xFFEADFD8)),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Total Estimasi Biaya',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                  ),
-                                  Text(
-                                    estimasiBiaya > 0 ? 'Rp ${_formatRupiah(estimasiBiaya)}' : 'Belum ditentukan',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w900,
-                                      color: estimasiBiaya > 0 ? const Color(0xFFB45309) : const Color(0xFF9CA3AF),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (!biayaDikonfirmasi && estimasiBiaya > 0) ...[
-                                const SizedBox(height: 4),
-                                const Text(
-                                  '⏳ Menunggu persetujuan Anda',
-                                  style: TextStyle(fontSize: 10.5, color: Color(0xFF9CA3AF)),
-                                ),
-                              ],
-                              const Divider(height: 16, color: Color(0xFFEADFD8)),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Jumlah DP (40%)',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                  ),
-                                  Text(
-                                    estimasiBiaya > 0 ? 'Rp ${_formatRupiah(jumlahDp)}' : '-',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w900,
-                                      color: Color(0xFF059669),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 16, color: Color(0xFFEADFD8)),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Sisa Pembayaran (Pelunasan)',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                  ),
-                                  Text(
-                                    estimasiBiaya > 0 ? 'Rp ${_formatRupiah(sisaPembayaran)}' : '-',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w900,
-                                      color: Color(0xFF2563EB),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 16, color: Color(0xFFEADFD8)),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Status Pembayaran',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF6B7280),
-                                    ),
-                                  ),
-                                  Flexible(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: paymentColor.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(6),
+                                        color: widget.getStatusColor(statusPesanan).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Text(
-                                        paymentLabel,
-                                        textAlign: TextAlign.center,
+                                        statusPesanan.replaceAll('_', ' ').toUpperCase(),
                                         style: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w800,
-                                          color: paymentColor,
+                                          color: widget.getStatusColor(statusPesanan),
                                         ),
                                       ),
                                     ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                _buildSpecRow(
+                                  'Kategori / Tahapan',
+                                  categoryLabel.toUpperCase(),
+                                  valueColor: const Color(0xFF5D4037),
+                                ),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                _buildSpecRow(
+                                  'Tanggal & Waktu Pesanan',
+                                  tanggal,
+                                ),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                _buildSpecRow(
+                                  'Perkiraan Tanggal Selesai',
+                                  estimasiSelesai,
+                                  valueColor: const Color(0xFF059669),
+                                ),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Total Estimasi Biaya',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    Text(
+                                      estimasiBiaya > 0 ? 'Rp ${_formatRupiah(estimasiBiaya)}' : 'Belum ditentukan',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                        color: estimasiBiaya > 0 ? const Color(0xFFB45309) : const Color(0xFF9CA3AF),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (!biayaDikonfirmasi && estimasiBiaya > 0) ...[
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    '⏳ Menunggu persetujuan Anda',
+                                    style: TextStyle(fontSize: 10.5, color: Color(0xFF9CA3AF)),
                                   ),
                                 ],
-                              ),
-                            ],
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Jumlah DP (40%)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    Text(
+                                      estimasiBiaya > 0 ? 'Rp ${_formatRupiah(jumlahDp)}' : '-',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF059669),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Sisa Pembayaran (Pelunasan)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    Text(
+                                      estimasiBiaya > 0 ? 'Rp ${_formatRupiah(sisaPembayaran)}' : '-',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF2563EB),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 16, color: Color(0xFFEADFD8)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Status Pembayaran',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    Flexible(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: paymentColor.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          paymentLabel,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: paymentColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                
+                                // =================================================
+                                // INFORMASI REKENING OWNER
+                                // =================================================
+                                const Divider(height: 20, color: Color(0xFFEADFD8)),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFEADFD8)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Row(
+                                        children: [
+                                          Icon(Icons.account_balance_rounded, size: 14, color: Color(0xFF5D4037)),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'Informasi Rekening Pembayaran',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF5D4037),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _buildSpecRow('Bank NAGARI', '7100.0220.147724'),
+                                      const SizedBox(height: 4),
+                                      _buildSpecRow('Atas Nama', 'ROSI ANNA'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
 
                           // =================================================
                           // AKSI PELANGGAN
@@ -1765,7 +1786,6 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
                               border: Border.all(color: const Color(0xFFEADFD8)),
                             ),
                             child: Text(
-                              // Mengambil catatan utama, atau fallback ke catatan dari item pertama jika ada
                               (_orderData['catatan'] ?? 
                               (_orderData['order_items'] != null && (_orderData['order_items'] as List).isNotEmpty 
                                   ? _orderData['order_items'][0]['catatan'] 
@@ -1809,17 +1829,8 @@ class _OrderDetailModalContentState extends State<_OrderDetailModalContent> {
                                   itemBuilder: (context, idx) {
                                     final history = statusHistory[idx];
                                     final rawDate = history['tanggal_update'] ?? history['created_at'] ?? '';
-                                    String formattedDate = '-';
-
-                                    if (rawDate.toString().isNotEmpty) {
-                                      try {
-                                        DateTime parsedDate = DateTime.parse(rawDate.toString()).toLocal();
-                                        formattedDate = "${parsedDate.day.toString().padLeft(2, '0')}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.year} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
-                                      } catch (e) {
-                                        formattedDate = rawDate.toString();
-                                      }
-                                    }
-
+                                    
+                                    final formattedDate = widget.formatCustomDate(rawDate.toString());
                                     final bool isCancelledHistory = (history['status'] ?? '').toString().toLowerCase() == 'dibatalkan';
 
                                     return Padding(
