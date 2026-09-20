@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 import 'main_screen.dart';
+import 'verify_otp_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -42,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_lockoutSeconds == 0) {
         setState(() {
           _isLocked = false;
-          _failedAttempts = 0; // Reset percobaan
+          _failedAttempts = 0;
         });
         timer.cancel();
       } else {
@@ -53,29 +54,58 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  void _submit() async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate() || _isLocked) return;
 
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    );
+
     final success = await authProvider.login(
-      _emailController.text,
+      _emailController.text.trim(),
       _passwordController.text,
     );
 
     if (success) {
       if (!mounted) return;
+
       setState(() => _failedAttempts = 0);
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainScreen()));
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const MainScreen(),
+        ),
+      );
     } else {
       if (!mounted) return;
-      
+
+      // Jika email belum diverifikasi,
+      // jangan dihitung sebagai percobaan login gagal.
+      if (authProvider.requiresVerification) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VerifyOtpScreen(
+              email: _emailController.text.trim(),
+            ),
+          ),
+        );
+        return;
+      }
+
+      // Login gagal karena alasan lain
       setState(() {
         _failedAttempts++;
       });
 
       if (_failedAttempts >= 3) {
         _startLockoutTimer();
-        _showSnackBar('Terlalu banyak percobaan. Coba lagi dalam 30 detik.');
+
+        _showSnackBar(
+          'Terlalu banyak percobaan. Coba lagi dalam 30 detik.',
+        );
       } else {
         _showSnackBar(authProvider.errorMessage);
       }
@@ -85,10 +115,17 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: const TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFFEF4444), // Red 500
+        content: Text(
+          message,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: const Color(0xFFEF4444),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
         margin: const EdgeInsets.all(16),
       ),
     );
@@ -99,18 +136,25 @@ class _LoginScreenState extends State<LoginScreen> {
     final isLoading = Provider.of<AuthProvider>(context).isLoading;
 
     return Scaffold(
-      // Menggunakan warna latar global dari tema (Krem FDFBF7)
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 32.0,
+            ),
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 420),
+              constraints: const BoxConstraints(
+                maxWidth: 420,
+              ),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(24), // Sesuai rounded-2xl di web
-                border: Border.all(color: const Color(0xFFEADFD8), width: 1.5),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFFEADFD8),
+                  width: 1.5,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF5D4037).withOpacity(0.04),
@@ -126,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Logo Header Kustom (Mengikuti gaya SplashScreen)
+                    // Logo Header Kustom
                     Center(
                       child: Container(
                         width: 72,
@@ -136,13 +180,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF5D4037).withOpacity(0.2),
+                              color: const Color(0xFF5D4037)
+                                  .withOpacity(0.2),
                               blurRadius: 16,
                               offset: const Offset(0, 8),
                             ),
                           ],
                           border: Border.all(
-                            color: const Color(0xFF3E2723).withOpacity(0.3),
+                            color: const Color(0xFF3E2723)
+                                .withOpacity(0.3),
                             width: 1,
                           ),
                         ),
@@ -158,31 +204,35 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 24),
-                    
-                    // Teks Judul & Subjudul
+
+                    // Teks Judul
                     const Text(
                       'Selamat Datang',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 24,
-                        fontWeight: FontWeight.w900, // Extra Bold
+                        fontWeight: FontWeight.w900,
                         color: Color(0xFF3E2723),
                         letterSpacing: -0.5,
                       ),
                     ),
+
                     const SizedBox(height: 8),
+
                     const Text(
                       'Masuk ke portal pelanggan Adi Ukiran',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF6B7280), // Muted text
+                        color: Color(0xFF6B7280),
                       ),
                     ),
+
                     const SizedBox(height: 32),
-                    
+
                     // FIELD EMAIL
                     const Text(
                       'ALAMAT EMAIL',
@@ -193,24 +243,37 @@ class _LoginScreenState extends State<LoginScreen> {
                         letterSpacing: 1.0,
                       ),
                     ),
+
                     const SizedBox(height: 8),
+
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(
                         hintText: 'pelanggan@adiukiran.com',
-                        prefixIcon: Icon(Icons.email_outlined, size: 20, color: Color(0xFF9CA3AF)),
+                        prefixIcon: Icon(
+                          Icons.email_outlined,
+                          size: 20,
+                          color: Color(0xFF9CA3AF),
+                        ),
                       ),
                       validator: (val) {
-                        if (val == null || val.isEmpty) return 'Email wajib diisi';
-                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val)) {
+                        if (val == null || val.isEmpty) {
+                          return 'Email wajib diisi';
+                        }
+
+                        if (!RegExp(
+                          r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                        ).hasMatch(val)) {
                           return 'Format email tidak valid';
                         }
+
                         return null;
                       },
                     ),
+
                     const SizedBox(height: 20),
-                    
+
                     // FIELD PASSWORD
                     const Text(
                       'KATA SANDI',
@@ -221,16 +284,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         letterSpacing: 1.0,
                       ),
                     ),
+
                     const SizedBox(height: 8),
+
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _isObscure,
                       decoration: InputDecoration(
                         hintText: '••••••••',
-                        prefixIcon: const Icon(Icons.lock_outline, size: 20, color: Color(0xFF9CA3AF)),
+                        prefixIcon: const Icon(
+                          Icons.lock_outline,
+                          size: 20,
+                          color: Color(0xFF9CA3AF),
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                            _isObscure
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
                             color: const Color(0xFF9CA3AF),
                             size: 20,
                           ),
@@ -241,51 +312,78 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
                       ),
-                      validator: (val) => val!.isEmpty ? 'Password wajib diisi' : null,
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
+                          return 'Password wajib diisi';
+                        }
+
+                        return null;
+                      },
                     ),
+
                     const SizedBox(height: 32),
-                    
+
                     // TOMBOL LOGIN
                     SizedBox(
                       height: 52,
                       child: ElevatedButton(
-                        onPressed: (isLoading || _isLocked) ? null : _submit,
+                        onPressed:
+                            (isLoading || _isLocked) ? null : _submit,
                         style: ElevatedButton.styleFrom(
-                          disabledBackgroundColor: const Color(0xFFE5E7EB),
-                          disabledForegroundColor: const Color(0xFF9CA3AF),
+                          disabledBackgroundColor:
+                              const Color(0xFFE5E7EB),
+                          disabledForegroundColor:
+                              const Color(0xFF9CA3AF),
                         ),
-                        child: isLoading 
+                        child: isLoading
                             ? const SizedBox(
-                                width: 24, 
-                                height: 24, 
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)
-                              ) 
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
                             : Text(
-                                _isLocked ? 'TUNGGU $_lockoutSeconds DETIK' : 'MASUK SEKARANG', 
+                                _isLocked
+                                    ? 'TUNGGU $_lockoutSeconds DETIK'
+                                    : 'MASUK SEKARANG',
                                 style: const TextStyle(
-                                  fontWeight: FontWeight.bold, 
+                                  fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                   letterSpacing: 1.0,
                                 ),
                               ),
                       ),
                     ),
+
                     const SizedBox(height: 24),
-                    
+
                     // Tombol Register
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Text(
                           'Belum punya akun? ',
-                          style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                          style: TextStyle(
+                            color: Color(0xFF6B7280),
+                            fontSize: 13,
+                          ),
                         ),
                         GestureDetector(
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const RegisterScreen(),
+                              ),
+                            );
+                          },
                           child: const Text(
                             'Daftar di sini',
                             style: TextStyle(
-                              color: Color(0xFFB45309), // Amber 700
+                              color: Color(0xFFB45309),
                               fontWeight: FontWeight.w800,
                               fontSize: 13,
                             ),
